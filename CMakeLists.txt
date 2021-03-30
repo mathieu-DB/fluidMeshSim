@@ -20,6 +20,7 @@ set(
         trimesh_types.h
         fluid.h
         fluid.cpp 
+        "Source.h"
         "tools.h")
 
 add_executable(${PROJECT_NAME} ${SRCFILES})

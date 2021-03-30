@@ -36,5 +36,10 @@ namespace tools {
 		n = ((v2 - v0).cross(v1 - v0)).normalized();
 	}
 
-
+	void SetVectorToZero(std::vector<double> v) {
+		int s = v.size();
+		for (int i = 0; i < s; i++) {
+			v[i] = 0;
+		}
+	}
 }

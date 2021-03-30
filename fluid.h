@@ -20,15 +20,18 @@
 #include "trimesh.h"
 
 using namespace std;
-	class fluid {
+	class Fluid {
 	private:
 		const static int DIM = 3;
 		const static int iterations = 10;
+		int N = 16;
+		double dx = 1;
 
 		int faces;
 		
 		trimesh::trimesh_t mesh;
-
+		vector<double> div;
+		vector<double> p;
 
 
 		/**
@@ -41,16 +44,19 @@ using namespace std;
 		vector<double> U1[DIM];
 
 		/** Temperature (packed)*/
-		vector<double> temperature0[DIM];
+		vector<double> temperature0;
 
 		/** Temporary Temperature (packed)*/
-		vector<double> temperature1[DIM];
+		vector<double> temperature1;
 
 		/** Array of vertices for the mesh*/
-		Eigen::Matrix3d V;
+		Eigen::MatrixXd V;
 
 		/** Array of triangles and their associated vertex indexes for the mesh*/
-		Eigen::Matrix3i F;
+		Eigen::MatrixXi F;
+
+		/** Array of the vertices in 2D parametrized form*/
+		Eigen::MatrixXd uv;
 
 		Eigen::SparseMatrix<double> L;
 
@@ -60,23 +66,23 @@ using namespace std;
 		/** Sources of heat and cold*/
 		std::list<Source> sources;
 	public:
-		fluid(trimesh::trimesh_t mesh, Eigen::Matrix3Xd v, Eigen::Matrix3Xi f);
+		Fluid(trimesh::trimesh_t mesh, Eigen::MatrixXd v, Eigen::MatrixXi f, Eigen::MatrixXd uv);
 
 		void setup();
 
 		int IX(int i, int j);
 
-		void setBoundary(int b, double x[]);
+		void setBoundary(int b, vector<double> x);
 
-		void getVelocity(Vector3d x, int t, Vector3d vel);
+		void getVelocity(Vector3d x,  Vector3d vel);
 
-		void getVelocity(Vector3d x, int t, vector<double> U[], Vector3d vel);
+		void getVelocity(Vector3d x,  vector<double> U[], Vector3d vel);
 
-		double interpolate(Vector3d x, int t, vector<double> s);
+		double interpolate(Vector3d x,  vector<double> s);
 
-		int traceParticle(Vector3d x0, int t, double h, Vector3d x1);
+		void traceParticle(Vector3d x0, double h, Vector3d &x1);
 
-		int traceParticle(Vector3d x0, int t, vector<double> U[], double h, Vector3d x1);
+		void traceParticle(Vector3d x0, vector<double> U[], double h, Vector3d &x1);
 
 		void diffuse(vector<double> S1, vector<double> S0, int b, double diff, double dt);
 

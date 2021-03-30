@@ -15,6 +15,7 @@
 #include <igl/flipped_triangles.h>
 #include <igl/topological_hole_fill.h>
 
+#include "fluid.h"
 #include "trimesh.h"
 
 Eigen::MatrixXd V_uv;
@@ -24,6 +25,7 @@ igl::triangle::SCAFData scaf_data;
     Eigen::MatrixXi F;
 bool show_uv = false;
 float uv_scale = 0.2f;
+bool open = true;
 
 bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier)
 {
@@ -54,6 +56,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
         viewer.core().align_camera_center(V, F);
     }
 
+    
     viewer.data().compute_normals();
 
     return false;
@@ -78,6 +81,10 @@ int main(int argc, char* argv[])
     Eigen::VectorXi bnd = Eigen::Map<Eigen::VectorXi>(primary_bnd->data(), primary_bnd->size());
 
     igl::map_vertices_to_circle(V, bnd, bnd_uv);
+
+    trimesh::trimesh_t mesh;
+
+
     bnd_uv *= sqrt(M.sum() / (2 * igl::PI));
     if (all_bnds.size() == 1)
     {
@@ -110,8 +117,20 @@ int main(int argc, char* argv[])
     // Plot the mesh
     igl::opengl::glfw::Viewer viewer;
     viewer.data().set_mesh(V, F);
-    const auto& V_uv = uv_scale * scaf_data.w_uv.topRows(V.rows());
-    viewer.data().set_uv(V_uv);
+    V_uv = uv_scale * scaf_data.w_uv.topRows(V.rows());
+    viewer.core().is_animating = true;
+
+    Fluid fluid(mesh, V, F, V_uv);
+    fluid.setup();
+
+    int N = 16;
+    Eigen::MatrixX3d v_temps;
+    Eigen::MatrixX3d ones;
+    v_temps.resize(V.rows(), Eigen::NoChange);
+    ones.resize(V.rows(), Eigen::NoChange);
+    v_temps.setZero();
+    ones.setOnes();
+    viewer.data().set_colors(v_temps);
     viewer.callback_key_down = &key_down;
 
     // Enable wireframe
@@ -123,7 +142,16 @@ int main(int argc, char* argv[])
 
     std::cerr << "Press space for running an iteration." << std::endl;
     std::cerr << "Press 1 for Mesh 2 for UV" << std::endl;
-
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer&)->bool
+    {
+        // Create orbiting animation
+        v_temps += 0.005 * ones;
+        viewer.data().set_colors(v_temps);
+        return false;
+    };
     // Launch the viewer
     viewer.launch();
+    
+
+
 }

@@ -14,6 +14,13 @@
 #include <igl/cotmatrix.h>
 using namespace trimesh;
 
+
+//TODO Reproduce 2D grid behavior from assignement 3
+//TODO Apply grid simulation to parametrized mesh ignoring 3rd component
+//TODO Add 3rd dimension (possibly only applies to temperature and boyency)
+
+
+
 /**
 * Constructor
 * 
@@ -21,23 +28,29 @@ using namespace trimesh;
 * @param v vertices
 * @param f faces
 */
-fluid::fluid(trimesh::trimesh_t mesh, Eigen::Matrix3Xd v, Eigen::Matrix3Xi f)
+Fluid::Fluid(trimesh::trimesh_t mesh, Eigen::MatrixXd v, Eigen::MatrixXi f, Eigen::MatrixXd uv)
 {
-	mesh = mesh;
 	V = v;
 	F = f;
-	faces = mesh.getNumFaces();
+	Fluid::uv = uv;
+	mesh = mesh;
 	igl::cotmatrix(V, F, L);
+	faces = F.rows();
+
 }
 
 /**
 * Setups the varius memory structures of the program
 * (i.e. U0, U1, temperature0, temperature1)
 */
-void fluid::setup()
+void Fluid::setup()
 {
 	elapsed = 0;
-	for (int i = 0; i < V.rows(); i++) {
+	dx = 1.0 / N;
+	int np2s = (N + 2) * (N + 2);
+	for (int i = 0; i < np2s; i++) {
+		div.emplace_back(0);
+		p.emplace_back(0);
 		U0[0].emplace_back(0);
 		U0[1].emplace_back(0);
 		U0[2].emplace_back(0);
@@ -46,23 +59,34 @@ void fluid::setup()
 		U1[1].emplace_back(0);
 		U1[2].emplace_back(0);
 
-		temperature0[0].emplace_back(0);
-		temperature0[1].emplace_back(0);
-		temperature0[2].emplace_back(0);
-		temperature1[0].emplace_back(0);
-		temperature1[1].emplace_back(0);
-		temperature1[2].emplace_back(0);
+		temperature0.emplace_back(0);
+		/*temperature0[1].emplace_back(0);
+		temperature0[2].emplace_back(0);*/
+		temperature1.emplace_back(0);
+		//temperature1[1].emplace_back(0);
+		//temperature1[2].emplace_back(0);
 
 	}
 }
 
-int fluid::IX(int i, int j)
+int Fluid::IX(int i, int j)
 {
-	return 0;
+	return i*(N+2)+j;
 }
 
-void fluid::setBoundary(int b, double x[])
+void Fluid::setBoundary(int b, vector<double> x)
 {
+	int i;
+	for (i = 1; i <= N; i++) {
+		x[IX(0, i)] = b == 1 ? -x[IX(1, i)] : x[IX(1, i)];
+		x[IX(N + 1, i)] = b == 1 ? -x[IX(N, i)] : x[IX(N, i)];
+		x[IX(i, 0)] = b == 2 ? -x[IX(i, 1)] : x[IX(i, 1)];
+		x[IX(i, N + 1)] = b == 2 ? -x[IX(i, N)] : x[IX(i, N)];
+	}
+	x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
+	x[IX(0, N + 1)] = 0.5f * (x[IX(1, N + 1)] + x[IX(0, N)]);
+	x[IX(N + 1, 0)] = 0.5f * (x[IX(N, 0)] + x[IX(N + 1, 1)]);
+	x[IX(N + 1, N + 1)] = 0.5f * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
 }
 
 /**
@@ -71,9 +95,9 @@ void fluid::setBoundary(int b, double x[])
 * @param x
 * @param vel
 */
-void fluid::getVelocity(Vector3d x, int t, Vector3d vel)
+void Fluid::getVelocity(Vector3d x, Vector3d vel)
 {
-	getVelocity(x, t, U0, vel);
+	getVelocity(x, U0, vel);
 }
 
 /**
@@ -84,11 +108,10 @@ void fluid::getVelocity(Vector3d x, int t, Vector3d vel)
 * @param U
 * @param vel
 */
-void fluid::getVelocity(Vector3d x, int t, vector<double> U[], Vector3d vel)
+void Fluid::getVelocity(Vector3d x, vector<double> U[], Vector3d vel)
 {
-	vel[0] = interpolate(x, t, U[0]);
-	vel[1] = interpolate(x, t, U[1]);
-	vel[2] = interpolate(x, t, U[2]);
+	vel[0] = interpolate(x,U[0]);
+	vel[1] = interpolate(x,U[1]);
 }
 
 /**
@@ -99,18 +122,22 @@ void fluid::getVelocity(Vector3d x, int t, vector<double> U[], Vector3d vel)
 * @param s Scalar values to interpolate
 * @return interpolated value
 */
-double fluid::interpolate(Vector3d x, int t, vector<double> s)
+double Fluid::interpolate(Vector3d x, vector<double> s)
 {
-	Vector3i vertices = F.row(t);
-	Vector3d v0 = V.row(vertices[0]);
-	Vector3d v1 = V.row(vertices[1]);
-	Vector3d v2 = V.row(vertices[2]);
-	double A = ((v1 - v0).cross(v2 - v0)).norm() / 2.0;
-	double A0 = ((x - v2).cross(v1 - x)).norm() / 2.0;
-	double A1 = ((x - v0).cross(v2 - x)).norm() / 2.0;
-	double A2 = ((x - v0).cross(v1 - x)).norm() / 2.0;
-	double r = (s[vertices[0]] * A0 + s[vertices[1]] * A1 + s[vertices[2]] * A2) / A;
-	return r;
+	double ir = ((x[0] * N) + 0.5);
+	double jr = ((x[1] * N) + 0.5);
+	ir = std::min(std::max(ir, 0.5), N + 0.5);
+	jr = std::min(std::max(jr, 0.5), N + 0.5);
+	int i = (int)ir;
+	int j = (int)jr;
+
+	double a1 = ir - i;
+	double a0 = 1 - a1;
+
+	double b1 = jr - j;
+	double b0 = 1 - b1;
+
+	return a0 * (b0 * s[IX(i, j)] + b1 * s[IX(i, j + 1)]) + a1 * (b0 * s[IX(i + 1, j)] + b1 * s[IX(i + 1, j + 1)]);
 }
 
 /**
@@ -121,9 +148,9 @@ double fluid::interpolate(Vector3d x, int t, vector<double> s)
 * @param h  Time step
 * @param x1 Final particle location
 */
-int fluid::traceParticle(Vector3d x0, int t, double h, Vector3d x1)
+void Fluid::traceParticle(Vector3d x0, double h, Vector3d &x1)
 {
-	return traceParticle(x0, t, U0, h, x1);
+	traceParticle(x0, U0, h, x1);
 }
 
 /**
@@ -138,47 +165,15 @@ int fluid::traceParticle(Vector3d x0, int t, double h, Vector3d x1)
 * @param h  Time step
 * @param x1 Resulting point
 */
-int fluid::traceParticle(Vector3d x0, int t, vector<double> U[], double h, Vector3d x1)
+void Fluid::traceParticle(Vector3d x0, vector<double> U[], double h, Vector3d &x1)
 {
-	//TODO Find way to move on the mesh following a given direction
-	//TODO Extend so the foward euler can travel across more than 2 triangles
-	x1.setZero();
-	Vector3d vec(0, 0, 0);
-	getVelocity(x0, t, vec);
+	
+	Eigen::Vector3d vec;
+	vec.setZero();
+	getVelocity(x0, U, vec);
 	vec *= h;
 	x1 = x0 + vec;
-	if (isInTriangle(x1, t)) {
-		return t;
-	}
-	else {
-		trimesh_t::halfedge_t he = mesh.face_halfedge(t);
-		while (V.row(he.to_vertex) != x0) {
-			he = mesh.next_halfedge(he);
-		}
-		he = mesh.next_halfedge(mesh.next_halfedge(he));
-		Vector3d b0 = V.row(mesh.from_vertex(he));
-		Vector3d b = (V.row(he.to_vertex) - b0);
-		
-		int tt = mesh.get_halfedge(he.opposite_he).face;
-		double a0x = x0.x();
-		double a0y = x0.y();
-		double b0x = b0.x();
-		double b0y = b0.y();
-		double k = (1 / (b.y() - (b.x() * vec.y() / vec.x()))) * (a0y - b0y + (b0x * vec.y() / vec.x()) + (a0x * vec.y() / vec.x()));
-		Vector3d trans = b * k;
-		double rest = (vec - (trans - x0)).norm();
-		Vector3d w = b.normalized();
-		Vector3d n1;
-		Vector3d n2;
-		tools::GetNormalizedTriangleNormal(V.row(F.row(t)[0]), V.row(F.row(t)[1]), V.row(F.row(t)[2]), n1);
-		tools::GetNormalizedTriangleNormal(V.row(F.row(tt)[0]), V.row(F.row(tt)[1]), V.row(F.row(tt)[2]), n2);
-		tools::RotateVector(vec, w, n1, n2);
-		vec = vec.normalized() * rest;
-		x1 = trans + vec;
 
-		return tt;
-	}
-	return 0;
 }
 
 /**
@@ -189,23 +184,21 @@ int fluid::traceParticle(Vector3d x0, int t, vector<double> U[], double h, Vecto
 * @param diff diffusion coefficient
 * @param dt   time step
 */
-void fluid::diffuse(vector<double> S1, vector<double> S0, int b, double diff, double dt)
+void Fluid::diffuse(vector<double> S1, vector<double> S0, int b, double diff, double dt)
 {
-	//TODO Remove parameter b
-	double diffRate = dt * diff;
 	int i, j, k;
+	// (1/dx)^2 == N*N
+	double diffRate = dt * diff * N * N;
 	for (k = 0; k < iterations; k++) {
-		for (i = 0; i < V.rows(); i++) {
-			vector<index_t> vertices = mesh.vertex_vertex_neighbors(i);
-			int size = vertices.size();
-			double t = 0;
-			for (j = 0; j < size; j++) {
-				t += S1[vertices[j]];
+		for (i = 1; i <= N; i++) {
+			for (j = 1; j <= N; j++) {
+				S1[IX(i, j)] = (S0[IX(i, j)]
+					+ diffRate * (S1[IX(i - 1, j)] + S1[IX(i + 1, j)] + S1[IX(i, j - 1)] + S1[IX(i, j + 1)]))
+					/ (1 + 4 * diffRate);
 			}
-			t *= diffRate;
-			t += S0[i];
-			S1[i] = t / (1 + diffRate * size);
 		}
+		setBoundary(b, S1);
+
 	}
 }
 
@@ -217,18 +210,30 @@ void fluid::diffuse(vector<double> S1, vector<double> S0, int b, double diff, do
 * @param U  Velocity field
 * @param dt Time step
 */
-void fluid::transport(vector<double> s1, vector<double> s0, vector<double> U[], double dt)
+void Fluid::transport(vector<double> s1, vector<double> s0, vector<double> U[], double dt)
 {
-	Vector3d p1(0, 0, 0);
-	Vector3d p2(0, 0, 0);
-	int t;
-	for (int i = 0; i < V.rows(); i++) {
-		p2.setZero();
-		p1 = V.row(i);
-		t = mesh.vertex_face(i);
-		t = traceParticle(p1, t, dt, p2);
-		s1[i] = interpolate(p2, t, s0);
-		
+	int i, j;
+	double x, y;
+	Vector3d p1;
+	p1.setZero();
+	Vector3d p2;
+	p2.setZero();
+	for (i = 1; i <= N; i++) {
+		for (j = 1; j <= N; j++) {
+			p2.setZero();
+
+			x = i * dx - dx * 0.5f;
+			y = j * dx - dx * 0.5f;
+			p1[0] = x;
+			p1[1] = y;
+			p1[2] = 0;
+
+			traceParticle(p1, U, dt, p2);
+
+			s1[IX(i, j)] = interpolate(p2, s0);
+
+
+		}
 	}
 }
 
@@ -238,15 +243,37 @@ void fluid::transport(vector<double> s1, vector<double> s0, vector<double> U[], 
 *
 * @param U
 */
-void fluid::project(vector<double> U[])
+void Fluid::project(vector<double> U[])
 {
-	/*vector<float> div;
-	vector<float> p;
-	int v = V.rows();
+	
+	
+	for (int i = 1; i <= N; i++) {
+		for (int j = 1; j <= N; j++) {
+			div[IX(i, j)] = -0.5f * dx
+				* (U[0][IX(i + 1, j)] - U[0][IX(i - 1, j)] + U[1][IX(i, j + 1)] - U[1][IX(i, j - 1)]);
+			p[IX(i, j)] = 0;
+		}
+	}
+	setBoundary(0, div);
+	setBoundary(0, p);
+	for (int k = 0; k < iterations; k++) {
+		for (int i = 1; i <= N; i++) {
+			for (int j = 1; j <= N; j++) {
+				p[IX(i, j)] = (div[IX(i, j)] + p[IX(i + 1, j)] + p[IX(i - 1, j)] + p[IX(i, j + 1)]
+					+ p[IX(i, j - 1)]) / 4.0;
+			}
+		}
+		setBoundary(0, p);
+	}
 
-	for (int i = 0; i < v; i++) {
-
-	}*/
+	for (int i = 1; i <= N; i++) {
+		for (int j = 1; j <= N; j++) {
+			U[0][IX(i, j)] -= 0.5 * (p[IX(i + 1, j)] - p[IX(i - 1, j)]) * N;
+			U[1][IX(i, j)] -= 0.5 * (p[IX(i, j + 1)] - p[IX(i, j - 1)]) * N;
+		}
+	}
+	setBoundary(1, U[0]);
+	setBoundary(2, U[1]);
 }
 
 /**
@@ -257,11 +284,10 @@ void fluid::project(vector<double> U[])
 * @param x
 * @param f
 */
-void fluid::addForce(vector<double> U[], double dt, Vector3d x, Vector3d f, int v)
+void Fluid::addForce(vector<double> U[], double dt, Vector3d x, Vector3d f, int v)
 {
 	addSource(U[0], dt, x, f.x(), v);
 	addSource(U[1], dt, x, f.y(), v);
-	addSource(U[2], dt, x, f.z(), v);
 }
 
 /**
@@ -272,24 +298,21 @@ void fluid::addForce(vector<double> U[], double dt, Vector3d x, Vector3d f, int 
 * @param x      position
 * @param amount amount
 */
-void fluid::addSource(vector<double> S, double dt, Vector3d x, double amount, int v)
+void Fluid::addSource(vector<double> S, double dt, Vector3d x, double amount, int v)
 {
-	//Using the Cotangent Laplacian Matrix to get the vertices' weights
-	//Iterate over non-zero coefficients of the sparse laplacian
-	//in the column corresponding to vertex v
-	//The non-zero coefficients are the vertices adjacent to v
-	double div = std::abs(L.coeff(v,v));
-	for (SparseMatrix<double>::InnerIterator it(L, v); it; ++it)
-	{
-		if (it.row() != v) {
-			S[it.row()] += amount * dt * it.value() / div;
-		}
-		it.value();
-		it.row();   // row index
-		it.col();   // col index (here it is equal to k)
-		it.index(); // inner index, here it is equal to it.row()
-	}
+	double ir = ((x.x() * N) + 0.5);
+	double jr = ((x.y() * N) + 0.5);
+	int i = (int)ir;
+	int j = (int)jr;
 
+	double alpha1 = (1 - (ir - i)) * (1 - (jr - j));
+	double alpha2 = (ir - i) * (1 - (jr - j));
+	double alpha3 = (ir - i) * (jr - j);
+	double alpha4 = (1 - (ir - i)) * (jr - j);
+	S[IX(i, j)] += alpha1 * amount * dt;
+	S[IX(i, j + 1)] += alpha4 * amount * dt;
+	S[IX(i + 1, j)] += alpha2 * amount * dt;
+	S[IX(i + 1, j + 1)] += alpha3 * amount * dt;
 
 }
 
@@ -299,13 +322,18 @@ void fluid::addSource(vector<double> S, double dt, Vector3d x, double amount, in
 *
 * @return average temperature
 */
-double fluid::getReferenceTemperature()
+double Fluid::getReferenceTemperature()
 {
-	double t = 0;
-	for (int i = 0; i < V.rows(); i++) {
-		t += temperature0->at(i);
+	int count = 0;
+	double referenceTemperature = 0;
+	for (int i = 1; i <= N; i++) {
+		for (int j = 1; j <= N; j++) {
+			referenceTemperature += temperature0[IX(i, j)];
+			count++;
+		}
 	}
-	return t/V.rows();
+	referenceTemperature /= count;
+	return referenceTemperature;
 }
 
 /**
@@ -315,12 +343,22 @@ double fluid::getReferenceTemperature()
 * @param U
 * @param dt
 */
-void fluid::addTemperatureForce(vector<double> U[], double dt)
+void Fluid::addTemperatureForce(vector<double> U[], double dt)
 {
-	double refTemp = getReferenceTemperature();
-	double beta = 0;
+
+	double referenceTemperature = getReferenceTemperature();
+	double beta = 1;
 	
-	
+
+	// TODO: Objective 7: change velocities based on the temperature. Don't forget
+	// to set Boundaries after modifying velocities!
+	for (int i = 1; i <= N; i++) {
+		for (int j = 1; j <= N; j++) {
+			//buoyancy times step size times temperature delta
+			U[1][IX(i, j)] += beta * dt * (referenceTemperature - 0.5f * (temperature0[IX(i, j + 1)] + temperature0[IX(i, j)]));
+		}
+	}
+	setBoundary(2, U[1]);
 }
 
 /**
@@ -328,29 +366,32 @@ void fluid::addTemperatureForce(vector<double> U[], double dt)
 * 
 * @param dt
 */
-void fluid::velocityStep(double dt)
+void Fluid::velocityStep(double dt)
 {
-	double visc = 1;
-	vector<double> temp [DIM];
-	//Diffuse step
-	diffuse(U1[0], U0[0], 0, visc, dt);
-	diffuse(U1[1], U0[1], 0, visc, dt);
-	diffuse(U1[2], U0[2], 0, visc, dt);
-	std::copy(std::begin(U1), std::end(U1), std::begin(temp));
-	std::copy(std::begin(U0), std::end(U0), std::begin(U1));
-	std::copy(std::begin(temp), std::end(temp), std::begin(U0));
-
-	//Should technecaly project ...
-
-	transport(U1[0], U0[0], U1, dt);
-	transport(U1[1], U0[1], U1, dt);
-	transport(U1[2], U0[2], U1, dt);
-
-	std::copy(std::begin(U1), std::end(U1), std::begin(temp));
-	std::copy(std::begin(U0), std::end(U0), std::begin(U1));
-	std::copy(std::begin(temp), std::end(temp), std::begin(U0));
-
-	//Should project again ....
+	double visc = 1.0;
+	vector<double> temp[DIM];
+	if (true) {
+		diffuse(U1[0], U0[0], 1, visc, dt);
+		diffuse(U1[1], U0[1], 2, visc, dt);
+		std::copy(std::begin(U1), std::end(U1), std::begin(temp));
+		std::copy(std::begin(U0), std::end(U0), std::begin(U1));
+		std::copy(std::begin(temp), std::end(temp), std::begin(U0));
+	}
+	if (true) {
+		project(U0);
+	}
+	if (true) {
+		transport(U1[0], U0[0], U1, dt);
+		transport(U1[1], U0[1], U1, dt);
+		std::copy(std::begin(U1), std::end(U1), std::begin(temp));
+		std::copy(std::begin(U0), std::end(U0), std::begin(U1));
+		std::copy(std::begin(temp), std::end(temp), std::begin(U0));
+		setBoundary(1, U0[0]);
+		setBoundary(2, U0[1]);
+	}
+	if (true) {
+		project(U0);
+	}
 
 }
 
@@ -359,12 +400,36 @@ void fluid::velocityStep(double dt)
 *
 * @param dt
 */
-void fluid::scalarStep(double dt)
+void Fluid::scalarStep(double dt)
 {
+	vector<double> temp;
+	if (true) {
+		double diff = 1.0;
+		diffuse(temperature1, temperature0, 0, diff, dt);
+		temp = temperature1;
+		temperature1 = temperature0;
+		temperature0 = temp;
+	}
+
+	if (true) {
+		transport(temperature1, temperature0, U0, dt);
+		temp = temperature1;
+		temperature1 = temperature0;
+		temperature0 = temp;
+		setBoundary(0, temperature0);
+	}
 
 }
-void fluid::step()
+void Fluid::step()
 {
+	double dt = 0.1;
+	for (Source s : sources) {
+		addSource(temperature0, dt, s.location, s.amount, 0);
+	}
+	addTemperatureForce(U0, dt);
+	velocityStep(dt);
+	scalarStep(dt);
+	elapsed += dt;
 }
 
 /**
@@ -375,26 +440,7 @@ void fluid::step()
 * @param t The triangle's index
 * @return wether or not the point is in the triangle
 */
-bool fluid::isInTriangle(Vector3d x, int t) {
-	Vector3d a = V.row(F.row(t)[0]);
-	Vector3d b = V.row(F.row(t)[1]);
-	Vector3d c = V.row(F.row(t)[2]);
-	Vector3d p = x;
-	Vector3d ab = b - a;
-	Vector3d ac = c - a;
-	Vector3d cb = c - b;
-
-	Vector3d pa = p - a;
-	Vector3d pb = p - b;
-	Vector3d pc = p - c;
-
-	Vector3d abpa = ab.cross(pa);
-	Vector3d acpc = ac.cross(pc);
-	Vector3d cbpb = cb.cross(pb);
-
-	if (abpa.dot(acpc) >= 0 && abpa.dot(cbpb) >= 0 && acpc.dot(cbpb)>=0) {
-		return true;
-	}
+bool Fluid::isInTriangle(Vector3d x, int t) {
 	return false;
 }
 
