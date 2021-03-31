@@ -184,7 +184,7 @@ void Fluid::traceParticle(Vector3d x0, vector<double> U[], double h, Vector3d &x
 * @param diff diffusion coefficient
 * @param dt   time step
 */
-void Fluid::diffuse(vector<double> S1, vector<double> S0, int b, double diff, double dt)
+void Fluid::diffuse(vector<double> &S1, vector<double> &S0, int b, double diff, double dt)
 {
 	int i, j, k;
 	// (1/dx)^2 == N*N
@@ -210,7 +210,7 @@ void Fluid::diffuse(vector<double> S1, vector<double> S0, int b, double diff, do
 * @param U  Velocity field
 * @param dt Time step
 */
-void Fluid::transport(vector<double> s1, vector<double> s0, vector<double> U[], double dt)
+void Fluid::transport(vector<double> &s1, vector<double> &s0, vector<double> U[], double dt)
 {
 	int i, j;
 	double x, y;
@@ -298,7 +298,7 @@ void Fluid::addForce(vector<double> U[], double dt, Vector3d x, Vector3d f, int 
 * @param x      position
 * @param amount amount
 */
-void Fluid::addSource(vector<double> S, double dt, Vector3d x, double amount, int v)
+void Fluid::addSource(vector<double> &S, double dt, Vector3d x, double amount, int v)
 {
 	double ir = ((x.x() * N) + 0.5);
 	double jr = ((x.y() * N) + 0.5);
@@ -442,6 +442,30 @@ void Fluid::step()
 */
 bool Fluid::isInTriangle(Vector3d x, int t) {
 	return false;
+}
+
+void Fluid::createSource(Vector3d x, double amount)
+{
+	Source s(x, amount);
+	sources.push_back(s);
+}
+
+double Fluid::interpolateTempForVertex(Vector2d x)
+{
+	double ir = ((x[0] * 0.05) + 0.5);
+	double jr = ((x[1] * 0.05) + 0.5);
+	ir = std::min(std::max(ir, 0.5), N + 0.5);
+	jr = std::min(std::max(jr, 0.5), N + 0.5);
+	int i = (int)ir;
+	int j = (int)jr;
+
+	double a1 = ir - i;
+	double a0 = 1 - a1;
+
+	double b1 = jr - j;
+	double b0 = 1 - b1;
+
+	return a0 * (b0 * temperature0[IX(i, j)] + b1 * temperature0[IX(i, j + 1)]) + a1 * (b0 * temperature0[IX(i + 1, j)] + b1 * temperature0[IX(i + 1, j + 1)]);
 }
 
 

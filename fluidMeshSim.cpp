@@ -119,7 +119,6 @@ int main(int argc, char* argv[])
     viewer.data().set_mesh(V, F);
     V_uv = uv_scale * scaf_data.w_uv.topRows(V.rows());
     viewer.core().is_animating = true;
-
     Fluid fluid(mesh, V, F, V_uv);
     fluid.setup();
 
@@ -138,14 +137,22 @@ int main(int argc, char* argv[])
 
     // Draw checkerboard texture
     viewer.data().show_texture = true;
-
+    Eigen::Vector3d s(0.5, 0.5, 0);
+    fluid.createSource(s, 20);
 
     std::cerr << "Press space for running an iteration." << std::endl;
     std::cerr << "Press 1 for Mesh 2 for UV" << std::endl;
     viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer&)->bool
     {
         // Create orbiting animation
-        v_temps += 0.005 * ones;
+        fluid.step();
+        for (int i = 0; i < V.rows(); i++) {
+            double t = fluid.interpolateTempForVertex(V_uv.row(i));
+            if(t > 0.125) cout << t << endl;
+            t *= 1000;
+            s = Eigen::Vector3d((t > 0 )? t : 0, 0.125, (t < 0) ? t : 0);
+            v_temps.row(i) = s;
+        }
         viewer.data().set_colors(v_temps);
         return false;
     };

@@ -84,15 +84,15 @@ using namespace std;
 
 		void traceParticle(Vector3d x0, vector<double> U[], double h, Vector3d &x1);
 
-		void diffuse(vector<double> S1, vector<double> S0, int b, double diff, double dt);
+		void diffuse(vector<double> &S1, vector<double> &S0, int b, double diff, double dt);
 
-		void transport(vector<double> s1, vector<double> s0, vector<double> U[], double dt);
+		void transport(vector<double> &s1, vector<double> &s0, vector<double> U[], double dt);
 
 		void project(vector<double> U[]);
 
 		void addForce(vector<double> U[], double dt, Vector3d x, Vector3d f, int v);
 
-		void addSource(vector<double> S, double dt, Vector3d x, double amount, int v);
+		void addSource(vector<double> &S, double dt, Vector3d x, double amount, int v);
 
 		double getReferenceTemperature();
 
@@ -106,6 +106,9 @@ using namespace std;
 
 		bool isInTriangle(Vector3d x, int t);
 
+		void createSource(Vector3d x, double amount);
+
+		double interpolateTempForVertex(Vector2d x);
 	};
 
 #endif // !fluid_h
