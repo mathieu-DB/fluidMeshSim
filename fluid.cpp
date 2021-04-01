@@ -48,7 +48,7 @@ void Fluid::setup()
 	elapsed = 0;
 	dx = 1.0 / N;
 	int np2s = (N + 2) * (N + 2);
-	for (int i = 0; i < np2s; i++) {
+	for (int i = 0; i < V.rows(); i++) {
 		div.emplace_back(0);
 		p.emplace_back(0);
 		U0[0].emplace_back(0);
@@ -445,8 +445,16 @@ bool Fluid::isInTriangle(Vector3d x, int t) {
 }
 
 void Fluid::createSource(Vector3d x, double amount)
-{
+{	
+	int v = 0;
+	double d2 = 0;
+	double t;
+	for (int i = 0; i < V.rows(); i++) {
+		t = (uv.row(i) - x).squaredNorm();
+			if (t <= d2) v=i;
+	}
 	Source s(x, amount);
+	s.vertex = v;
 	sources.push_back(s);
 }
 
