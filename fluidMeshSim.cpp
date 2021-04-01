@@ -14,6 +14,9 @@
 #include <igl/PI.h>
 #include <igl/flipped_triangles.h>
 #include <igl/topological_hole_fill.h>
+#include <igl/opengl/glfw/imgui/ImGuiMenu.h>
+#include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
+#include <imgui/imgui.h>
 
 #include "fluid.h"
 #include "trimesh.h"
@@ -116,11 +119,42 @@ int main(int argc, char* argv[])
 
     // Plot the mesh
     igl::opengl::glfw::Viewer viewer;
+
+    Fluid fluid(mesh, V, F, V_uv);
+    fluid.setup();
+
+
+    igl::opengl::glfw::imgui::ImGuiMenu menu;
+    viewer.plugins.push_back(&menu);
+    menu.callback_draw_viewer_menu = [&]()
+    {
+        // Draw parent menu content
+        //menu.draw_viewer_menu();
+
+        // Add new group
+        if (ImGui::CollapsingHeader("Controls", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            // Expose variable directly ...
+            ImGui::Checkbox("Velocity Diffuse", &fluid.velocityDiffuse);
+            ImGui::Checkbox("Velocity Project", &fluid.velocityProject);
+            ImGui::Checkbox("Velocity Advect", &fluid.velocityAdvect);
+            ImGui::Checkbox("Scalar Diffuse", &fluid.scalarDiffuse);
+            ImGui::Checkbox("Scalar Advect", &fluid.scalarAdvect);
+
+
+            ImGui::SliderFloat("Viscosity", &fluid.viscosity, 1e-8, 1);
+            ImGui::SliderFloat("Diffusion", &fluid.diffusion, 1e-8, 1);
+            ImGui::SliderFloat("Bouyancy", &fluid.bouyancy, -1, 1);
+            ImGui::SliderInt("Iterations", &fluid.iterations, 0, 1000);
+            ImGui::SliderFloat("Time step", &fluid.timeStep, 0.001, 1);
+            ImGui::SliderFloat("Gravity", &fluid.gravity, -10, 15);
+        }
+    };
+
     viewer.data().set_mesh(V, F);
     V_uv = uv_scale * scaf_data.w_uv.topRows(V.rows());
     viewer.core().is_animating = true;
-    Fluid fluid(mesh, V, F, V_uv);
-    fluid.setup();
+    
 
     int N = 16;
     Eigen::MatrixX3d v_temps;
@@ -129,7 +163,7 @@ int main(int argc, char* argv[])
     ones.resize(V.rows(), Eigen::NoChange);
     v_temps.setZero();
     ones.setOnes();
-    viewer.data().set_colors(v_temps);
+   // viewer.data().set_colors(v_temps);
     viewer.callback_key_down = &key_down;
 
     // Enable wireframe
@@ -138,7 +172,8 @@ int main(int argc, char* argv[])
     // Draw checkerboard texture
     viewer.data().show_texture = true;
     Eigen::Vector3d s(0.5, 0.5, 0);
-    fluid.createSource(s, 20);
+    fluid.createSource(Eigen::Vector3d (0.5, 0.5, 0) , 20);
+    fluid.createSource(Eigen::Vector3d(0.2, 0.2, 0), -20);
 
     std::cerr << "Press space for running an iteration." << std::endl;
     std::cerr << "Press 1 for Mesh 2 for UV" << std::endl;
@@ -146,11 +181,27 @@ int main(int argc, char* argv[])
     {
         // Create orbiting animation
         fluid.step();
+        double max = std::max(fluid.getMaxTemp(),1.0);
+        double min = std::abs(std::min(fluid.getMinTemp(),-1.0));
         for (int i = 0; i < V.rows(); i++) {
             double t = fluid.interpolateTempForVertex(V_uv.row(i));
-            if(t > 0.125) cout << t << endl;
-            t *= 1000;
-            s = Eigen::Vector3d((t > 0 )? t : 0, 0.125, (t < 0) ? t : 0);
+            s = Eigen::Vector3d(t > 0 ? t : 0, 0.125, t < 0 ? -t : 0);
+            /*if (t == 0) {
+                s[0] = max;
+                s[1] = max;
+                s[2] = max;
+            }
+            else if(t>0){
+                s[0] = max;
+                s[1] =  max-t;
+                s[2] = max-t;
+            }
+            else {
+                s[0] = min - std::abs(t);
+                s[1] = min - std::abs(t);
+                s[2] = min;
+            }*/
+            
             v_temps.row(i) = s;
         }
         viewer.data().set_colors(v_temps);

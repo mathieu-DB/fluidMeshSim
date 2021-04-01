@@ -347,7 +347,7 @@ void Fluid::addTemperatureForce(vector<double> U[], double dt)
 {
 
 	double referenceTemperature = getReferenceTemperature();
-	double beta = 1;
+	double beta = bouyancy;
 	
 
 	// TODO: Objective 7: change velocities based on the temperature. Don't forget
@@ -368,19 +368,19 @@ void Fluid::addTemperatureForce(vector<double> U[], double dt)
 */
 void Fluid::velocityStep(double dt)
 {
-	double visc = 1.0;
+	double visc = viscosity;
 	vector<double> temp[DIM];
-	if (true) {
+	if (velocityDiffuse) {
 		diffuse(U1[0], U0[0], 1, visc, dt);
 		diffuse(U1[1], U0[1], 2, visc, dt);
 		std::copy(std::begin(U1), std::end(U1), std::begin(temp));
 		std::copy(std::begin(U0), std::end(U0), std::begin(U1));
 		std::copy(std::begin(temp), std::end(temp), std::begin(U0));
 	}
-	if (true) {
+	if (velocityProject) {
 		project(U0);
 	}
-	if (true) {
+	if (velocityAdvect) {
 		transport(U1[0], U0[0], U1, dt);
 		transport(U1[1], U0[1], U1, dt);
 		std::copy(std::begin(U1), std::end(U1), std::begin(temp));
@@ -389,7 +389,7 @@ void Fluid::velocityStep(double dt)
 		setBoundary(1, U0[0]);
 		setBoundary(2, U0[1]);
 	}
-	if (true) {
+	if (velocityProject) {
 		project(U0);
 	}
 
@@ -403,15 +403,15 @@ void Fluid::velocityStep(double dt)
 void Fluid::scalarStep(double dt)
 {
 	vector<double> temp;
-	if (true) {
-		double diff = 1.0;
+	if (scalarDiffuse) {
+		double diff = diffusion;
 		diffuse(temperature1, temperature0, 0, diff, dt);
 		temp = temperature1;
 		temperature1 = temperature0;
 		temperature0 = temp;
 	}
 
-	if (true) {
+	if (scalarAdvect) {
 		transport(temperature1, temperature0, U0, dt);
 		temp = temperature1;
 		temperature1 = temperature0;
@@ -422,7 +422,7 @@ void Fluid::scalarStep(double dt)
 }
 void Fluid::step()
 {
-	double dt = 0.1;
+	double dt = timeStep;
 	for (Source s : sources) {
 		addSource(temperature0, dt, s.location, s.amount, 0);
 	}
@@ -468,5 +468,20 @@ double Fluid::interpolateTempForVertex(Vector2d x)
 	return a0 * (b0 * temperature0[IX(i, j)] + b1 * temperature0[IX(i, j + 1)]) + a1 * (b0 * temperature0[IX(i + 1, j)] + b1 * temperature0[IX(i + 1, j + 1)]);
 }
 
+double Fluid::getMaxTemp() {
+	double m = -DBL_MAX;
+	for (double t : temperature0) {
+		if (t > m) m = t;
+	}
+	return m;
+}
+
+double Fluid::getMinTemp() {
+	double m = DBL_MAX;
+	for (double t : temperature0) {
+		if (t < m) m = t;
+	}
+	return m;
+}
 
 

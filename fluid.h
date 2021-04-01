@@ -23,7 +23,6 @@ using namespace std;
 	class Fluid {
 	private:
 		const static int DIM = 3;
-		const static int iterations = 10;
 		int N = 16;
 		double dx = 1;
 
@@ -33,7 +32,7 @@ using namespace std;
 		vector<double> div;
 		vector<double> p;
 
-
+		
 		/**
 		* Velocity Field non-staggered, packed. Each velocity vector is set 
 		* at a vertex of the mesh
@@ -66,6 +65,23 @@ using namespace std;
 		/** Sources of heat and cold*/
 		std::list<Source> sources;
 	public:
+
+		double doubleVariable = 0;
+		float viscosity = 1e-6;
+		float diffusion = 1e-6;
+		float bouyancy = 0.1;
+		int iterations = 30;
+		float timeStep = 0.1;
+		float gravity = 1;
+
+
+		bool velocityDiffuse = true;
+		bool velocityProject = true;
+		bool velocityAdvect = true;
+		bool scalarDiffuse = true;
+		bool scalarAdvect = true;
+
+
 		Fluid(trimesh::trimesh_t mesh, Eigen::MatrixXd v, Eigen::MatrixXi f, Eigen::MatrixXd uv);
 
 		void setup();
@@ -109,6 +125,10 @@ using namespace std;
 		void createSource(Vector3d x, double amount);
 
 		double interpolateTempForVertex(Vector2d x);
+
+		double getMaxTemp();
+
+		double getMinTemp();
 	};
 
 #endif // !fluid_h
