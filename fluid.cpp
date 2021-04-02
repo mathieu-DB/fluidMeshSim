@@ -190,14 +190,30 @@ void Fluid::diffuse(vector<double> &S1, vector<double> &S0, int b, double diff, 
 	// (1/dx)^2 == N*N
 	double diffRate = dt * diff * N * N;
 	for (k = 0; k < iterations; k++) {
-		for (i = 1; i <= N; i++) {
-			for (j = 1; j <= N; j++) {
-				S1[IX(i, j)] = (S0[IX(i, j)]
-					+ diffRate * (S1[IX(i - 1, j)] + S1[IX(i + 1, j)] + S1[IX(i, j - 1)] + S1[IX(i, j + 1)]))
-					/ (1 + 4 * diffRate);
+
+		for (int i = 0; i < V.rows(); i++) {
+			double c = S0[i];
+			int n = 0;
+			for (SparseMatrix<double>::InnerIterator it(L, i); it; ++it)
+			{
+				if (it.row() != i) {
+					c += diffRate * S1[it.row()];
+					n++;
+				}
+				S1[i] += c / (1 + n * diffRate);
 			}
+
 		}
-		setBoundary(b, S1);
+
+
+		//for (i = 1; i <= N; i++) {
+		//	for (j = 1; j <= N; j++) {
+		//		S1[IX(i, j)] = (S0[IX(i, j)]
+		//			+ diffRate * (S1[IX(i - 1, j)] + S1[IX(i + 1, j)] + S1[IX(i, j - 1)] + S1[IX(i, j + 1)]))
+		//			/ (1 + 4 * diffRate);
+		//	}
+		//}
+		//setBoundary(b, S1);
 
 	}
 }
@@ -217,7 +233,21 @@ void Fluid::transport(vector<double> &s1, vector<double> &s0, vector<double> U[]
 	Vector3d p1;
 	p1.setZero();
 	Vector3d p2;
-	p2.setZero();
+	
+	for (i = 0; i < V.rows(); i++) {
+		p2.setZero();
+		p1 = uv.row(i);
+
+		traceParticle(p1, U, dt, p2);
+		//TODO find wich triangle the new point belongs to:
+		//1. Find edge attached to original vertex that is closest to new point
+		//2. Verify if point is in one of the 2 triangles attached to said edge
+		//	if it is -> done
+		//	else ->  REPEAT 1.  with the edge's 2nd vertex as a source
+		// Repeat until found.
+
+
+	}
 	for (i = 1; i <= N; i++) {
 		for (j = 1; j <= N; j++) {
 			p2.setZero();
@@ -246,7 +276,43 @@ void Fluid::transport(vector<double> &s1, vector<double> &s0, vector<double> U[]
 void Fluid::project(vector<double> U[])
 {
 	
-	
+	for (int i = 0; i < V.rows(); i++) {
+		/*for (SparseMatrix<double>::InnerIterator it(L, i); it; ++it)
+		{
+			if (it.row() != i) {
+				div[i] +
+			}
+		}*/
+		p[i] = 0;
+	}
+	for (int k = 0; k < iterations; k++) {
+		for (int i = 0; i < V.rows(); i++) {
+			p[i] = L.coeff(i, i);
+			int n = 0;
+			for (SparseMatrix<double>::InnerIterator it(L, i); it; ++it)
+			{
+				if (it.row() != i) {
+					p[i] += p[it.row()];
+					n++;
+				}
+			}
+			p[i] /= n;
+		}
+	}
+
+	for (int i = 0; i < V.rows(); i++) {
+		int n = 0;
+		for (SparseMatrix<double>::InnerIterator it(L, i); it; ++it)
+		{
+			if (it.row() != i) {
+				U[0][i] += p[it.row()];
+				U[1][i] += p[it.row()];
+				n++;
+			}
+			U[0][i] /= n;
+			U[1][i] /= n;
+		}
+	}
 	for (int i = 1; i <= N; i++) {
 		for (int j = 1; j <= N; j++) {
 			div[IX(i, j)] = -0.5f * dx
@@ -300,19 +366,32 @@ void Fluid::addForce(vector<double> U[], double dt, Vector3d x, Vector3d f, int 
 */
 void Fluid::addSource(vector<double> &S, double dt, Vector3d x, double amount, int v)
 {
-	double ir = ((x.x() * N) + 0.5);
-	double jr = ((x.y() * N) + 0.5);
-	int i = (int)ir;
-	int j = (int)jr;
+	//Use cotan matrix to distribute in a weighted fashion
+	if (v >= 0) {
+		double det =std::abs( L.coeff(v, v));
+		for (SparseMatrix<double>::InnerIterator it(L, v); it; ++it)
+		{
+			if (it.row() != v) {
+				S[it.row()] += it.value() / det * amount * dt;
+			}
+		}
+	}
+	else {
+		double ir = ((x.x() * N) + 0.5);
+		double jr = ((x.y() * N) + 0.5);
+		int i = (int)ir;
+		int j = (int)jr;
 
-	double alpha1 = (1 - (ir - i)) * (1 - (jr - j));
-	double alpha2 = (ir - i) * (1 - (jr - j));
-	double alpha3 = (ir - i) * (jr - j);
-	double alpha4 = (1 - (ir - i)) * (jr - j);
-	S[IX(i, j)] += alpha1 * amount * dt;
-	S[IX(i, j + 1)] += alpha4 * amount * dt;
-	S[IX(i + 1, j)] += alpha2 * amount * dt;
-	S[IX(i + 1, j + 1)] += alpha3 * amount * dt;
+		double alpha1 = (1 - (ir - i)) * (1 - (jr - j));
+		double alpha2 = (ir - i) * (1 - (jr - j));
+		double alpha3 = (ir - i) * (jr - j);
+		double alpha4 = (1 - (ir - i)) * (jr - j);
+		S[IX(i, j)] += alpha1 * amount * dt;
+		S[IX(i, j + 1)] += alpha4 * amount * dt;
+		S[IX(i + 1, j)] += alpha2 * amount * dt;
+		S[IX(i + 1, j + 1)] += alpha3 * amount * dt;
+	}
+	
 
 }
 
@@ -349,16 +428,40 @@ void Fluid::addTemperatureForce(vector<double> U[], double dt)
 	double referenceTemperature = getReferenceTemperature();
 	double beta = bouyancy;
 	
+	//Using the z component of the original vertices to add temperature force to the 
+	//velocity vector. We find the lowest vertex attached to the current one (if lower
+	//than it) and we have the force go that way
+	for (int i = 0; i < V.rows(); i++) {
+			int lowest = i;
+			Eigen::VectorXd p = V.row(i);
+			double lowestZ = p[2];
+			for (SparseMatrix<double>::InnerIterator it(L, i); it; ++it)
+			{
+				
+				Eigen::VectorXd p2= V.row(it.row());
+				if(p2[2] < lowestZ){
+					lowest = it.row();
+					lowestZ = p2[2];
+				}
+			}
+			if (lowest != i) {
+				Eigen::VectorXd vec = uv.row(i) - uv.row(lowest);
+				vec.normalize();
+				vec *= beta * dt * (referenceTemperature - 0.5f * (temperature0[i] + temperature0[lowest]));
+				U[0][i] += vec[0];
+				U[1][i] += vec[1];
+			}
+	}
 
 	// TODO: Objective 7: change velocities based on the temperature. Don't forget
 	// to set Boundaries after modifying velocities!
-	for (int i = 1; i <= N; i++) {
-		for (int j = 1; j <= N; j++) {
-			//buoyancy times step size times temperature delta
-			U[1][IX(i, j)] += beta * dt * (referenceTemperature - 0.5f * (temperature0[IX(i, j + 1)] + temperature0[IX(i, j)]));
-		}
-	}
-	setBoundary(2, U[1]);
+	//for (int i = 1; i <= N; i++) {
+	//	for (int j = 1; j <= N; j++) {
+	//		//buoyancy times step size times temperature delta
+	//		U[1][IX(i, j)] += beta * dt * (referenceTemperature - 0.5f * (temperature0[IX(i, j + 1)] + temperature0[IX(i, j)]));
+	//	}
+	//}
+	//setBoundary(2, U[1]);
 }
 
 /**
@@ -424,7 +527,7 @@ void Fluid::step()
 {
 	double dt = timeStep;
 	for (Source s : sources) {
-		addSource(temperature0, dt, s.location, s.amount, 0);
+		addSource(temperature0, dt, s.location, s.amount, s.vertex);
 	}
 	addTemperatureForce(U0, dt);
 	velocityStep(dt);
@@ -444,16 +547,13 @@ bool Fluid::isInTriangle(Vector3d x, int t) {
 	return false;
 }
 
-void Fluid::createSource(Vector3d x, double amount)
+void Fluid::createSource(int v, double amount)
 {	
 	int v = 0;
 	double d2 = 0;
 	double t;
-	for (int i = 0; i < V.rows(); i++) {
-		t = (uv.row(i) - x).squaredNorm();
-			if (t <= d2) v=i;
-	}
-	Source s(x, amount);
+	
+	Source s(v, amount);
 	s.vertex = v;
 	sources.push_back(s);
 }

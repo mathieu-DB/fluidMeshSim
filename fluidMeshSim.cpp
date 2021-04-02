@@ -172,8 +172,8 @@ int main(int argc, char* argv[])
     // Draw checkerboard texture
     viewer.data().show_texture = true;
     Eigen::Vector3d s(0.5, 0.5, 0);
-    fluid.createSource(Eigen::Vector3d (0.5, 0.5, 0) , 20);
-    fluid.createSource(Eigen::Vector3d(0.2, 0.2, 0), -20);
+    fluid.createSource(0 , 20);
+    fluid.createSource(50, -20);
 
     std::cerr << "Press space for running an iteration." << std::endl;
     std::cerr << "Press 1 for Mesh 2 for UV" << std::endl;

@@ -122,7 +122,7 @@ using namespace std;
 
 		bool isInTriangle(Vector3d x, int t);
 
-		void createSource(Vector3d x, double amount);
+		void createSource(int v, double amount);
 
 		double interpolateTempForVertex(Vector2d x);
 

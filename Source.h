@@ -10,8 +10,8 @@ class Source {
 	double amount = 0;
 	int vertex = 0;
 
-	Source(Vector3d p, float a) {
-		location = p;
+	Source(int v, float a) {
+		vertex = v;
 		amount = a;
 	}
 };
