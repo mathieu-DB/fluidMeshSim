@@ -9,7 +9,7 @@
 #include "trimesh_types.h" // triangle_t, edge_t
 #include <vector>
 #include <map>
-
+#include <Eigen/Dense>
 namespace trimesh
 {
 
@@ -199,6 +199,25 @@ public:
 
     index_t from_vertex(halfedge_t he) {
         return m_halfedges[he.opposite_he].to_vertex;
+    }
+
+    index_t get_opposite(index_t hei) {
+        return m_halfedges[hei].opposite_he;
+    }
+
+    index_t get_he_face(index_t hei) {
+        return m_halfedges[hei].face;
+    }
+
+    index_t find_halfedge_of_neib_vertex(index_t s, index_t n, int max) {
+        halfedge_t he = m_halfedges[m_vertex_halfedges[s]];
+        int c = 0;
+        while (he.to_vertex != n && c<max) {
+            he = m_halfedges[next_halfedge(m_halfedges[he.opposite_he]).to_vertex];
+            c++;
+        }
+        if (he.to_vertex != n) return -1;
+        return m_halfedges[he.opposite_he].opposite_he;
     }
 
 private:

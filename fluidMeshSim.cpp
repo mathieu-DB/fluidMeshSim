@@ -17,15 +17,24 @@
 #include <igl/opengl/glfw/imgui/ImGuiMenu.h>
 #include <igl/opengl/glfw/imgui/ImGuiHelpers.h>
 #include <imgui/imgui.h>
+#include <map>
+
 
 #include "fluid.h"
 #include "trimesh.h"
+#include "tools.h"
 
-Eigen::MatrixXd V_uv;
+
+Eigen::MatrixXd V_uv, uv_bnd, uv_edges1, uv_edges2;
+Eigen::VectorXi bnd;
 igl::Timer timer;
 igl::triangle::SCAFData scaf_data;
-    Eigen::MatrixXd V;
-    Eigen::MatrixXi F;
+Eigen::MatrixXd V, V_split , V_fused;
+Eigen::MatrixXi F, F_split , F_fused;
+std::map<int, int> V_mapSF{};
+std::map<int, int> V_mapFS{};
+std::map<int, int> dupe_map{};
+
 bool show_uv = false;
 float uv_scale = 0.2f;
 bool open = true;
@@ -41,22 +50,54 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
     {
         timer.start();
         igl::triangle::scaf_solve(scaf_data, 1);
+        
         std::cout << "time = " << timer.getElapsedTime() << std::endl;
     }
 
     const auto& V_uv = uv_scale * scaf_data.w_uv.topRows(V.rows());
     if (show_uv)
     {
+        
         viewer.data().clear();
+        viewer.data().clear_points();
+        for (int i = 0; i < uv_bnd.rows(); i++) {
+            int j = bnd[i];
+
+            uv_bnd.row(i) = Eigen::Vector3d(V_uv.row(j)[0], V_uv.row(j)[1],0);
+            if (i < uv_bnd.rows() - 1) {
+                uv_edges1.row(i) = uv_bnd.row(i);
+            }
+            if (i > 0) {
+                uv_edges2.row(i - 1) = uv_bnd.row(i);
+            }
+        }
         viewer.data().set_mesh(V_uv, F);
         viewer.data().set_uv(V_uv);
+        viewer.data().add_points(uv_bnd, Eigen::RowVector3d(1, 0, 0));
+
         viewer.core().align_camera_center(V_uv, F);
+
     }
     else
     {
+        viewer.data().clear();
+        for (int i = 0; i < uv_bnd.rows(); i++) {
+            int j = bnd[i];
+
+            uv_bnd.row(i) = Eigen::Vector3d(V.row(j)[0], V.row(j)[1], V.row(j)[2]);
+            if (i < uv_bnd.rows() - 1) {
+                uv_edges1.row(i) = uv_bnd.row(i);
+            }
+            if (i > 0) {
+                uv_edges2.row(i - 1) = uv_bnd.row(i);
+            }
+        }
         viewer.data().set_mesh(V, F);
         viewer.data().set_uv(V_uv);
         viewer.core().align_camera_center(V, F);
+        viewer.data().add_points(uv_bnd, Eigen::RowVector3d(1, 0, 0));
+        viewer.data().add_edges(uv_edges1, uv_edges2, Eigen::RowVector3d(1, 0, 0));
+        viewer.data().point_size = 5;
     }
 
     
@@ -81,11 +122,21 @@ int main(int argc, char* argv[])
     // Heuristic primary boundary choice: longest
     auto primary_bnd = std::max_element(all_bnds.begin(), all_bnds.end(), [](const std::vector<int>& a, const std::vector<int>& b) { return a.size() < b.size(); });
 
-    Eigen::VectorXi bnd = Eigen::Map<Eigen::VectorXi>(primary_bnd->data(), primary_bnd->size());
+    bnd = Eigen::Map<Eigen::VectorXi>(primary_bnd->data(), primary_bnd->size());
+
+    
+    //Original mesh is build with a seam and a mesh flattenning in mind
+    //vertices along the seam are pre duplicated to allow a cut
+    //Need to create a fused mesh to use cotmatrix and to walk along the vertices
+
+    tools::CreateFusedMesh(V, V_fused, F, F_fused, V_mapSF, V_mapFS, dupe_map, bnd);
+
+
 
     igl::map_vertices_to_circle(V, bnd, bnd_uv);
 
     trimesh::trimesh_t mesh;
+    trimesh::trimesh_t uv_mesh;
 
 
     bnd_uv *= sqrt(M.sum() / (2 * igl::PI));
@@ -148,11 +199,27 @@ int main(int argc, char* argv[])
             ImGui::SliderInt("Iterations", &fluid.iterations, 0, 1000);
             ImGui::SliderFloat("Time step", &fluid.timeStep, 0.001, 1);
             ImGui::SliderFloat("Gravity", &fluid.gravity, -10, 15);
+
+            
         }
     };
 
     viewer.data().set_mesh(V, F);
     V_uv = uv_scale * scaf_data.w_uv.topRows(V.rows());
+    uv_bnd.resize(bnd_uv.rows(), 3);
+    uv_edges1.resize(bnd_uv.rows() - 1, 3);
+    uv_edges2.resize(bnd_uv.rows() - 1, 3);
+    for (int i = 0; i < uv_bnd.rows(); i++) {
+        int j = bnd[i];
+
+        uv_bnd.row(i) = Eigen::Vector3d(V.row(j)[0], V.row(j)[1], V.row(j)[2]);
+        if (i < uv_bnd.rows() - 1) {
+            uv_edges1.row(i) = uv_bnd.row(i);
+        }
+        if (i > 0) {
+            uv_edges2.row(i-1) = uv_bnd.row(i);
+        }
+    }
     viewer.core().is_animating = true;
     
 
@@ -177,36 +244,36 @@ int main(int argc, char* argv[])
 
     std::cerr << "Press space for running an iteration." << std::endl;
     std::cerr << "Press 1 for Mesh 2 for UV" << std::endl;
-    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer&)->bool
-    {
-        // Create orbiting animation
-        fluid.step();
-        double max = std::max(fluid.getMaxTemp(),1.0);
-        double min = std::abs(std::min(fluid.getMinTemp(),-1.0));
-        for (int i = 0; i < V.rows(); i++) {
-            double t = fluid.interpolateTempForVertex(V_uv.row(i));
-            s = Eigen::Vector3d(t > 0 ? t : 0, 0.125, t < 0 ? -t : 0);
-            /*if (t == 0) {
-                s[0] = max;
-                s[1] = max;
-                s[2] = max;
-            }
-            else if(t>0){
-                s[0] = max;
-                s[1] =  max-t;
-                s[2] = max-t;
-            }
-            else {
-                s[0] = min - std::abs(t);
-                s[1] = min - std::abs(t);
-                s[2] = min;
-            }*/
-            
-            v_temps.row(i) = s;
-        }
-        viewer.data().set_colors(v_temps);
-        return false;
-    };
+    //viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer&)->bool
+    //{
+    //    // Create orbiting animation
+    //    fluid.step();
+    //    double max = std::max(fluid.getMaxTemp(),1.0);
+    //    double min = std::abs(std::min(fluid.getMinTemp(),-1.0));
+    //    for (int i = 0; i < V.rows(); i++) {
+    //        double t = fluid.interpolateTempForVertex(V_uv.row(i));
+    //        s = Eigen::Vector3d(t > 0 ? t : 0, 0.125, t < 0 ? -t : 0);
+    //        /*if (t == 0) {
+    //            s[0] = max;
+    //            s[1] = max;
+    //            s[2] = max;
+    //        }
+    //        else if(t>0){
+    //            s[0] = max;
+    //            s[1] =  max-t;
+    //            s[2] = max-t;
+    //        }
+    //        else {
+    //            s[0] = min - std::abs(t);
+    //            s[1] = min - std::abs(t);
+    //            s[2] = min;
+    //        }*/
+    //        
+    //        v_temps.row(i) = s;
+    //    }
+    //    viewer.data().set_colors(v_temps);
+    //    return false;
+    //};
     // Launch the viewer
     viewer.launch();
     

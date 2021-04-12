@@ -12,6 +12,7 @@
 #include "fluid.h"
 #include "tools.h"
 #include <igl/cotmatrix.h>
+#include <limits>
 using namespace trimesh;
 
 
@@ -28,13 +29,27 @@ using namespace trimesh;
 * @param v vertices
 * @param f faces
 */
-Fluid::Fluid(trimesh::trimesh_t mesh, Eigen::MatrixXd v, Eigen::MatrixXi f, Eigen::MatrixXd uv)
+Fluid::Fluid(trimesh::trimesh_t mesh,
+	Eigen::MatrixXd v,
+	Eigen::MatrixXi f,
+	Eigen::MatrixXd uv,
+	Eigen::MatrixXd v_fused,
+	Eigen::MatrixXi f_fused,
+	map<int, int> v_mapsf,
+	map<int, int> v_mapfs,
+	map<int, int> dupe_map)
 {
 	V = v;
 	F = f;
+	V_fused = v_fused;
+	F_fused = f_fused;
+	V_mapFS = v_mapfs;
+	V_mapSF = v_mapsf;
+	Fluid::dupe_map = dupe_map;
 	Fluid::uv = uv;
 	mesh = mesh;
-	igl::cotmatrix(V, F, L);
+	igl::cotmatrix(V_fused, F_fused, L);
+	igl::cotmatrix(V, F, L_split);
 	faces = F.rows();
 
 }
@@ -48,7 +63,7 @@ void Fluid::setup()
 	elapsed = 0;
 	dx = 1.0 / N;
 	int np2s = (N + 2) * (N + 2);
-	for (int i = 0; i < V.rows(); i++) {
+	for (int i = 0; i < V_fused.rows(); i++) {
 		div.emplace_back(0);
 		p.emplace_back(0);
 		U0[0].emplace_back(0);
@@ -176,6 +191,15 @@ void Fluid::traceParticle(Vector3d x0, vector<double> U[], double h, Vector3d &x
 
 }
 
+void Fluid::traceParticleFromVertex(int v, vector<double> U[], double h, Vector3d& x1) {
+	Eigen::Vector3d vec;
+	vec.setZero();
+	vec[0] = U[0][v];
+	vec[1] = U[1][v];
+	vec *= h;
+	x1 = uv.row(V_mapFS[v]) + vec;
+}
+
 /**
 * Diffuse the given scalar field by the given amount. 
 *
@@ -234,17 +258,38 @@ void Fluid::transport(vector<double> &s1, vector<double> &s0, vector<double> U[]
 	p1.setZero();
 	Vector3d p2;
 	
-	for (i = 0; i < V.rows(); i++) {
+	for (i = 0; i < V_fused.rows(); i++) {
 		p2.setZero();
-		p1 = uv.row(i);
 
-		traceParticle(p1, U, dt, p2);
+		p1 = uv.row(V_mapFS[i]);
+		
+		Eigen::Vector3d vec;
+		vec.setZero();
+		vec[0] = U[0][i];
+		vec[1] = U[1][i];
+		vec *= dt;
+
+		int j = V_mapFS[i];
+		if (isDupe(j)) {
+			Eigen::Vector3d x1 = 
+		}
+		
+		x1 = uv.row(V_mapFS[v]) + vec;
+		traceParticleFromVertex(i, U, dt, p2);
+
+		
+
+
 		//TODO find wich triangle the new point belongs to:
 		//1. Find edge attached to original vertex that is closest to new point
 		//2. Verify if point is in one of the 2 triangles attached to said edge
 		//	if it is -> done
 		//	else ->  REPEAT 1.  with the edge's 2nd vertex as a source
 		// Repeat until found.
+
+
+
+
 
 
 	}
@@ -286,8 +331,8 @@ void Fluid::project(vector<double> U[])
 		p[i] = 0;
 	}
 	for (int k = 0; k < iterations; k++) {
-		for (int i = 0; i < V.rows(); i++) {
-			p[i] = L.coeff(i, i);
+		for (int i = 0; i < V_fused.rows(); i++) {
+			p[i] = L.coeff(i,i);
 			int n = 0;
 			for (SparseMatrix<double>::InnerIterator it(L, i); it; ++it)
 			{
@@ -300,7 +345,7 @@ void Fluid::project(vector<double> U[])
 		}
 	}
 
-	for (int i = 0; i < V.rows(); i++) {
+	for (int i = 0; i < V_fused.rows(); i++) {
 		int n = 0;
 		for (SparseMatrix<double>::InnerIterator it(L, i); it; ++it)
 		{
@@ -431,21 +476,42 @@ void Fluid::addTemperatureForce(vector<double> U[], double dt)
 	//Using the z component of the original vertices to add temperature force to the 
 	//velocity vector. We find the lowest vertex attached to the current one (if lower
 	//than it) and we have the force go that way
-	for (int i = 0; i < V.rows(); i++) {
+	for (int i = 0; i < V_fused.rows(); i++) {
 			int lowest = i;
-			Eigen::VectorXd p = V.row(i);
+			Eigen::VectorXd p = V_fused.row(i);
 			double lowestZ = p[2];
 			for (SparseMatrix<double>::InnerIterator it(L, i); it; ++it)
 			{
 				
-				Eigen::VectorXd p2= V.row(it.row());
+				Eigen::VectorXd p2= V_fused.row(it.row());
 				if(p2[2] < lowestZ){
 					lowest = it.row();
 					lowestZ = p2[2];
 				}
 			}
 			if (lowest != i) {
-				Eigen::VectorXd vec = uv.row(i) - uv.row(lowest);
+				int j = V_mapFS[i];
+				int uv_low = V_mapFS[lowest];
+				//if currently analysed vertex is a dupe from the seam
+				//find to which dupe the "lowest" vertex is neighbour in uv
+				if (isDupe(j)) {
+					if (isDupe(uv_low) ){
+						int low2 = dupe_map[uv_low];
+						double d1 = (uv.row(j) - uv.row(uv_low)).squaredNorm();
+						double d2 = (uv.row(j) - uv.row(low2)).squaredNorm();
+						uv_low = (d1 < d2) ? uv_low : low2;
+					}
+					else {
+						int j2 = dupe_map[j];
+						double d1 = (uv.row(j) - uv.row(uv_low)).squaredNorm();
+						double d2 = (uv.row(j2) - uv.row(uv_low)).squaredNorm();
+						lowest = uv_low;
+						j = (d1 > d2) ? j2 : j;
+					}
+					
+					
+				}
+				Eigen::VectorXd vec = uv.row(j) - uv.row(uv_low);
 				vec.normalize();
 				vec *= beta * dt * (referenceTemperature - 0.5f * (temperature0[i] + temperature0[lowest]));
 				U[0][i] += vec[0];
@@ -549,7 +615,7 @@ bool Fluid::isInTriangle(Vector3d x, int t) {
 
 void Fluid::createSource(int v, double amount)
 {	
-	int v = 0;
+	v = 0;
 	double d2 = 0;
 	double t;
 	
@@ -557,6 +623,7 @@ void Fluid::createSource(int v, double amount)
 	s.vertex = v;
 	sources.push_back(s);
 }
+
 
 double Fluid::interpolateTempForVertex(Vector2d x)
 {
@@ -590,6 +657,67 @@ double Fluid::getMinTemp() {
 		if (t < m) m = t;
 	}
 	return m;
+}
+
+bool Fluid::isDupe(int v) {
+	return (dupe_map.find(v) == dupe_map.end()) ? false : true;
+}
+
+/*
+* Finds in which triangle the point x lies by searching from point startV  (all in uv coord)
+* 
+* @param startV Index in the V_split matrix of the starting vertex
+* @param x		Point with unknown triangle
+* @param t		Returning value for the triangle index in F_split
+* @return		Returns -1 if triangle is found otherwise returns the index of the boundary vertex
+				closest to the point (the point is outside the boundary and needs to be teleported to the boundary's dupe)
+*/
+int Fluid::indentifyTriangle(int startV, Vector3d x, int& t) {
+	
+	//Check all neighbors (using cot matrix)
+	Vector3d pointVector = x - uv.row(startV);
+	double closeDist = std::numeric_limits<double>::max();
+	int closest = startV;
+	int n = 0;
+	//Find closest edge
+	for (SparseMatrix<double>::InnerIterator it(L_split, startV); it; ++it)
+	{
+		//For neighbour vertex, build edge and check if x is in that direction
+		Vector3d edge = x - uv.row(it.row());
+		double dot = pointVector.dot(edge);
+		//ignore vertices not in the same general direction
+		if (dot >= 0) {
+			//using vector rejection to get the distance of the the point to the edge
+			double d = (edge - (dot / pointVector.dot(pointVector)) * pointVector).squaredNorm();
+			if (d < closeDist) {
+				closest = it.row();
+				closeDist = d;
+			}			
+		}
+		n++;
+	}
+	if (closest != startV) {
+		index_t hei = mesh.find_halfedge_of_neib_vertex(startV, closest, n);
+		//Check both triangles around the edge to see if point is in them
+		int f = mesh.get_he_face(hei);
+		if (f != -1) {
+			if (isInTriangle(x, f)) {
+				t = f;
+				return -1;
+			}
+		}
+		f = mesh.get_he_face(mesh.get_opposite(hei));
+		if (f != -1) {
+			if (isInTriangle(x, f)) {
+				t = f;
+				return -1;
+			}
+		}
+
+	}
+
+	
+	return -1;
 }
 
 

@@ -14,6 +14,7 @@
 
 #include <list>
 #include <vector>
+#include <map>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include "Source.h"
@@ -54,10 +55,28 @@ using namespace std;
 		/** Array of triangles and their associated vertex indexes for the mesh*/
 		Eigen::MatrixXi F;
 
+		/* Altered version of the V matrix that had the duped vertices along the seam fused*/
+		Eigen::MatrixXd V_fused;
+
+		/* Altered version of the F matrix with vertex indexes corresponding to the ones in V_fused*/
+		Eigen::MatrixXi F_fused;
+
+		/*Map containing the relation from the vertices in V_fused [V] --> [V_fused]*/
+		map<int, int> V_mapSF;
+
+		/*Map containing the relation from the vertices in V_fused [V_fused] --> [V]*/
+		map<int, int> V_mapFS;
+
+		/*Map associating dupe vertices in V with one and the other*/
+		map<int, int> dupe_map;
+			
+
 		/** Array of the vertices in 2D parametrized form*/
 		Eigen::MatrixXd uv;
 
 		Eigen::SparseMatrix<double> L;
+
+		Eigen::SparseMatrix<double> L_split;
 
 		/** Time elapsed in the fluid simulation*/
 		double elapsed;
@@ -82,7 +101,7 @@ using namespace std;
 		bool scalarAdvect = true;
 
 
-		Fluid(trimesh::trimesh_t mesh, Eigen::MatrixXd v, Eigen::MatrixXi f, Eigen::MatrixXd uv);
+		Fluid(trimesh::trimesh_t mesh, Eigen::MatrixXd v, Eigen::MatrixXi f, Eigen::MatrixXd uv, Eigen::MatrixXd v_fused, Eigen::MatrixXi f_fused, map<int,int> v_mapsf, map<int,int> v_mapfs, map<int,int> dupe_map);
 
 		void setup();
 
@@ -97,6 +116,8 @@ using namespace std;
 		double interpolate(Vector3d x,  vector<double> s);
 
 		void traceParticle(Vector3d x0, double h, Vector3d &x1);
+
+		void traceParticleFromVertex(int v, vector<double> U[], double h, Vector3d& x1);
 
 		void traceParticle(Vector3d x0, vector<double> U[], double h, Vector3d &x1);
 
@@ -129,6 +150,10 @@ using namespace std;
 		double getMaxTemp();
 
 		double getMinTemp();
+
+		bool isDupe(int v);
+
+		int indentifyTriangle(int startV, Vector3d x, int& t);
 	};
 
 #endif // !fluid_h
