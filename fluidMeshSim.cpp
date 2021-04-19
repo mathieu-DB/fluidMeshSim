@@ -237,8 +237,6 @@ int main(int argc, char* argv[])
     viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer&)->bool
     {
         fluid.step();
-        double max = std::max(fluid.getMaxTemp(),1.0);
-        double min = std::abs(std::min(fluid.getMinTemp(),-1.0));
         for (int i = 0; i < V.rows(); i++) {
             int v = V_mapSF[i];
             double t = fluid.getTempAtVertex(v);
