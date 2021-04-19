@@ -1,8 +1,8 @@
 # Fluid Simulation on a Mesh
 
-##Build
+## Build
 
-C++ and cmake are necessary
+C++ and [cmake](https://cmake.org/download/) are necessary
 Clone this repository 
 ```
 git clone https://github.com/mathieu-DB/fluidMeshSim.git
@@ -19,7 +19,7 @@ cd build
 cmake ..
 ```
 If your system created a Visual Studio project, you can
-* Open the project and BUILD (not run) from VS
+* Open the project (open fluidMeshSim.sln) and BUILD SOLUTION (not run) from VS
 
 or
 
