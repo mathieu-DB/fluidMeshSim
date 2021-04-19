@@ -1,10 +1,11 @@
+/*
+* Author : Mathieu David-Babin
+*/
 #include <Eigen/Dense>
 using namespace Eigen;
 
 class Source {
 	
-	
-
 	public:
 	Vector3d location = Vector3d().Zero();
 	double amount = 0;

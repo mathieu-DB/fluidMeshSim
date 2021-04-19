@@ -16,12 +16,6 @@
 using namespace trimesh;
 
 
-//TODO Reproduce 2D grid behavior from assignement 3
-//TODO Apply grid simulation to parametrized mesh ignoring 3rd component
-//TODO Add 3rd dimension (possibly only applies to temperature and boyency)
-
-
-
 /**
 * Constructor
 * 
@@ -87,73 +81,8 @@ void Fluid::setup()
 	div.resize(V_fused.rows());
 	p.resize(V_fused.rows());
 
-
-
-	//for (int i = 0; i < V_fused.rows(); i++) {
-	//	div.emplace_back(0);
-	//	p.emplace_back(0);
-	//	U0[0].emplace_back(0);
-	//	U0[1].emplace_back(0);
-	//	U0[2].emplace_back(0);
-
-	//	U1[0].emplace_back(0);
-	//	U1[1].emplace_back(0);
-	//	U1[2].emplace_back(0);
-
-	//	temperature0.emplace_back(0);
-	//	/*temperature0[1].emplace_back(0);
-	//	temperature0[2].emplace_back(0);*/
-	//	temperature1.emplace_back(0);
-	//	//temperature1[1].emplace_back(0);
-	//	//temperature1[2].emplace_back(0);
-
-	//}
 }
 
-int Fluid::IX(int i, int j)
-{
-	return 0;
-}
-
-void Fluid::setBoundary(int b, vector<double> x)
-{
-	int i;
-	//for (i = 1; i <= N; i++) {
-	//	x[IX(0, i)] = b == 1 ? -x[IX(1, i)] : x[IX(1, i)];
-	//	x[IX(N + 1, i)] = b == 1 ? -x[IX(N, i)] : x[IX(N, i)];
-	//	x[IX(i, 0)] = b == 2 ? -x[IX(i, 1)] : x[IX(i, 1)];
-	//	x[IX(i, N + 1)] = b == 2 ? -x[IX(i, N)] : x[IX(i, N)];
-	//}
-	//x[IX(0, 0)] = 0.5f * (x[IX(1, 0)] + x[IX(0, 1)]);
-	//x[IX(0, N + 1)] = 0.5f * (x[IX(1, N + 1)] + x[IX(0, N)]);
-	//x[IX(N + 1, 0)] = 0.5f * (x[IX(N, 0)] + x[IX(N + 1, 1)]);
-	//x[IX(N + 1, N + 1)] = 0.5f * (x[IX(N, N + 1)] + x[IX(N + 1, N)]);
-}
-
-/**
-* Gets the velocity at the given point using interpolation
-*
-* @param x
-* @param vel
-*/
-void Fluid::getVelocity(Vector3d x, Vector3d vel)
-{
-	//getVelocity(x, U0, vel);
-}
-
-/**
-* Gets the velocity in the provided velocity field at the given point using
-* interpolation
-*
-* @param x
-* @param U
-* @param vel
-*/
-void Fluid::getVelocity(Vector3d x, vector<double> U[], Vector3d vel)
-{
-	/*vel[0] = interpolate(x,U[0]);
-	vel[1] = interpolate(x,U[1]);*/
-}
 
 /**
 * Interpolates with the vertices values using barycentric coordinates
@@ -185,50 +114,6 @@ double Fluid::interpolate(VectorXd x, int t, vector<double> s)
 	
 }
 
-/**
-* Performs a simple Forward Euler particle trace using the current velocity
-* field.
-*
-* @param x0 Current particle location
-* @param h  Time step
-* @param x1 Final particle location
-*/
-void Fluid::traceParticle(Vector3d x0, double h, Vector3d& x1)
-{
-	//traceParticle(x0, U0, h, x1);
-}
-
-/**
-* Performs a simple particle trace using Forward Euler. Up to the caller to
-* provide a positive or negative time step depending if they want to trace
-* forward (i.e., filaments) or backwards (advection term). Note that this
-* method should assure that the resulting point be on the mesh.
-*
-* @param x0 Starting point
-* @param t  
-* @param U  Velocity field
-* @param h  Time step
-* @param x1 Resulting point
-*/
-void Fluid::traceParticle(Vector3d x0, vector<double> U[], double h, Vector3d& x1)
-{
-	
-	/*Eigen::Vector3d vec;
-	vec.setZero();
-	getVelocity(x0, U, vec);
-	vec *= h;
-	x1 = x0 + vec;*/
-
-}
-
-void Fluid::traceParticleFromVertex(int v, vector<double> U[], double h, Vector2d& x1) {
-	/*Eigen::Vector2d vec;
-	vec.setZero();
-	vec[0] = U[0][v];
-	vec[1] = U[1][v];
-	vec *= h;
-	x1 = uv.row(V_mapFS[v]) + vec;*/
-}
 
 /**
 * Diffuse the given scalar field by the given amount. 
@@ -412,19 +297,6 @@ void Fluid::project(vector<double> U[])
 	}
 }
 
-/**
-* Adds a force at a given point in the provided velocity field.
-*
-* @param U
-* @param dt
-* @param x
-* @param f
-*/
-void Fluid::addForce(vector<double> U[], double dt, Vector3d x, Vector3d f, int v)
-{
-	addSource(U[0], dt, x, f.x(), v);
-	addSource(U[1], dt, x, f.y(), v);
-}
 
 /**
 * Adds some time step scaled amount to the provided scalar field. 
@@ -436,36 +308,11 @@ void Fluid::addForce(vector<double> U[], double dt, Vector3d x, Vector3d f, int 
 */
 void Fluid::addSource(vector<double>& S, double dt, Vector3d x, double amount, int v)
 {
-	//Use cotan matrix to distribute in a weighted fashion
 	if (v >= 0) {
-		/*double det = L.coeff(v, v);
-		for (SparseMatrix<double>::InnerIterator it(L, v); it; ++it)
-		{
-			if (it.row() != v) {
-				S[it.row()] += it.value() / det * amount * dt;
-			}
-		}*/
+		
 		S[v] += amount * dt;
 
 	}
-	
-	else {
-		/*double ir = ((x.x() * N) + 0.5);
-		double jr = ((x.y() * N) + 0.5);
-		int i = (int)ir;
-		int j = (int)jr;
-
-		double alpha1 = (1 - (ir - i)) * (1 - (jr - j));
-		double alpha2 = (ir - i) * (1 - (jr - j));
-		double alpha3 = (ir - i) * (jr - j);
-		double alpha4 = (1 - (ir - i)) * (jr - j);
-		S[IX(i, j)] += alpha1 * amount * dt;
-		S[IX(i, j + 1)] += alpha4 * amount * dt;
-		S[IX(i + 1, j)] += alpha2 * amount * dt;
-		S[IX(i + 1, j + 1)] += alpha3 * amount * dt;*/
-	}
-	
-
 }
 
 /**
@@ -560,21 +407,16 @@ void Fluid::velocityStep(double dt)
 		diffuse(U1[1], U0[1], 2, visc, dt);
 		U1[0].swap(U0[0]);
 		U1[1].swap(U0[1]);
-	/*	std::copy(std::begin(U1), std::end(U1), std::begin(temp));
-		std::copy(std::begin(U0), std::end(U0), std::begin(U1));
-		std::copy(std::begin(temp), std::end(temp), std::begin(U0));*/
+
 	}
 	if (velocityProject) {
 		project(U0);
 	}
 	if (velocityAdvect) {
 		transport(U1[0], U0[0], U1, dt);
-		//transport(U1[1], U0[1], U1, dt);
 		U1[0].swap(U0[0]);
 		U1[1].swap(U0[1]);
-	/*	std::copy(std::begin(U1), std::end(U1), std::begin(temp));
-		std::copy(std::begin(U0), std::end(U0), std::begin(U1));
-		std::copy(std::begin(temp), std::end(temp), std::begin(U0));*/
+
 		if (scalarAdvect) {
 			temperature1.swap(temperature0);
 		}
@@ -598,18 +440,7 @@ void Fluid::scalarStep(double dt)
 		double diff = diffusion;
 		diffuse(temperature1, temperature0, 0, diff, dt);
 		temperature1.swap(temperature0);
-		/*temp = temperature1;
-		temperature1 = temperature0;
-		temperature0 = temp;*/
-	}
 
-	if (scalarAdvect) {
-		//transport(temperature1, temperature0, U0, dt);
-		//temperature1.swap(temperature0);
-		//temp = temperature1;
-		//temperature1 = temperature0;
-		//temperature0 = temp;
-		//setBoundary(0, temperature0);
 	}
 
 }
@@ -666,43 +497,8 @@ void Fluid::createSource(int v, double amount)
 }
 
 
-double Fluid::interpolateTempForVertex(Vector2d x)
-{
-	/*double ir = ((x[0] * 0.05) + 0.5);
-	double jr = ((x[1] * 0.05) + 0.5);
-	ir = std::min(std::max(ir, 0.5), N + 0.5);
-	jr = std::min(std::max(jr, 0.5), N + 0.5);
-	int i = (int)ir;
-	int j = (int)jr;
-
-	double a1 = ir - i;
-	double a0 = 1 - a1;
-
-	double b1 = jr - j;
-	double b0 = 1 - b1;
-
-	return a0 * (b0 * temperature0[IX(i, j)] + b1 * temperature0[IX(i, j + 1)]) + a1 * (b0 * temperature0[IX(i + 1, j)] + b1 * temperature0[IX(i + 1, j + 1)]);*/
-	return 0;
-}
-
 double Fluid::getTempAtVertex(int v) {
 	return temperature0[V_mapSF[v]];
-}
-
-double Fluid::getMaxTemp() {
-	double m = -DBL_MAX;
-	for (double t : temperature0) {
-		if (t > m) m = t;
-	}
-	return m;
-}
-
-double Fluid::getMinTemp() {
-	double m = DBL_MAX;
-	for (double t : temperature0) {
-		if (t < m) m = t;
-	}
-	return m;
 }
 
 bool Fluid::isDupe(int v) {
@@ -750,6 +546,7 @@ int Fluid::indentifyTriangle(int startV, VectorXd x, int& t, int pred) {
 		
 	}
 	if (closest == pred) {
+		// TODO Repair to lose the case to infinite recurse call
 		t = -1;
 		return closest;
 	}
@@ -757,11 +554,7 @@ int Fluid::indentifyTriangle(int startV, VectorXd x, int& t, int pred) {
 		index_t hei = mesh.find_halfedge_of_neib_vertex(startV, closest, n+1);
 		//Check both triangles around the edge to see if point is in them
 		int f = mesh.get_he_face(hei);
-		/*if (f == 23 && startV == 14) {
-			cout << x << endl;
-			cout << uv.row(startV) << endl;
-			cout << uv.row(closest) << endl;
-		}*/
+
 		int f1 = f;
 		if (f != -1) { //Triangle 1 exists
 			if (isInTriangle(x, f)) {

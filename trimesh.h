@@ -2,6 +2,8 @@
 * Author: Yotam Gingold <yotam (strudel) yotamgingold.com>
 * License: Public Domain.  (I, Yotam Gingold, the author, release this code into the public domain.)
 * GitHub: https://github.com/yig/halfedge
+* 
+* Modification author : Mathieu David-Babin
 */
 #ifndef __trimesh_h__
 #define __trimesh_h__

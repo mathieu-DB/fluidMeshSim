@@ -108,29 +108,13 @@ using namespace std;
 
 		void setup();
 
-		int IX(int i, int j);
-
-		void setBoundary(int b, vector<double> x);
-
-		void getVelocity(Vector3d x,  Vector3d vel);
-
-		void getVelocity(Vector3d x,  vector<double> U[], Vector3d vel);
-
 		double interpolate(VectorXd x, int t,  vector<double> s);
-
-		void traceParticle(Vector3d x0, double h, Vector3d &x1);
-
-		void traceParticleFromVertex(int v, vector<double> U[], double h, Vector2d& x1);
-
-		void traceParticle(Vector3d x0, vector<double> U[], double h, Vector3d &x1);
 
 		void diffuse(vector<double> &S1, vector<double> &S0, int b, double diff, double dt);
 
 		void transport(vector<double> &s1, vector<double> &s0, vector<double> U[], double dt);
 
 		void project(vector<double> U[]);
-
-		void addForce(vector<double> U[], double dt, Vector3d x, Vector3d f, int v);
 
 		void addSource(vector<double> &S, double dt, Vector3d x, double amount, int v);
 
@@ -148,13 +132,7 @@ using namespace std;
 
 		void createSource(int v, double amount);
 
-		double interpolateTempForVertex(Vector2d x);
-
 		double getTempAtVertex(int v);
-
-		double getMaxTemp();
-
-		double getMinTemp();
 
 		bool isDupe(int v);
 
