@@ -1,6 +1,7 @@
 # Fluid Simulation on a Mesh
 
 ##Build
+
 C++ and cmake are necessary
 Clone this repository 
 ```
@@ -14,11 +15,14 @@ git clone https://github.com/libigl/libigl.git
 Create necessary files
 ```
 mkdir build
+cd build
 cmake ..
 ```
 If your system created a Visual Studio project, you can
 * Open the project and BUILD (not run) from VS
+
 or
+
 * Configure msbuild in your path and run 
 ```
 msbuild fluidmesh.sln
