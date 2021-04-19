@@ -84,7 +84,7 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
         viewer.data().set_uv(V_uv);
         viewer.core().align_camera_center(V, F);
         viewer.data().add_points(uv_bnd, Eigen::RowVector3d(1, 0, 0));
-        viewer.data().point_size = 5;
+        viewer.data().point_size = 1;
     }
 
     
