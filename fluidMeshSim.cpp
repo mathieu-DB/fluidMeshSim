@@ -96,8 +96,9 @@ bool key_down(igl::opengl::glfw::Viewer& viewer, unsigned char key, int modifier
 int main(int argc, char* argv[])
 {
     using namespace std;
+    std::string argv1 = argv[1];
     // Load a mesh in OFF format
-    igl::readOBJ("../../../camel_b.obj", V, F);
+    igl::readOBJ(argv1, V, F);
 
     Eigen::MatrixXd bnd_uv, uv_init;
 
