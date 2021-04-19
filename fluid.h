@@ -11,7 +11,7 @@
 */
 #ifndef fluid_h
 #define fluid_h
-
+#include "tools.h"
 #include <list>
 #include <vector>
 #include <map>
@@ -20,12 +20,12 @@
 #include "Source.h"
 #include "trimesh.h"
 
+
+
 using namespace std;
 	class Fluid {
 	private:
-		const static int DIM = 3;
-		int N = 16;
-		double dx = 1;
+		const static int DIM;
 
 		int faces;
 		
@@ -38,10 +38,10 @@ using namespace std;
 		* Velocity Field non-staggered, packed. Each velocity vector is set 
 		* at a vertex of the mesh
 		*/
-		vector<double> U0[DIM];
+		vector<double> U0[3];
 
 		/** Temporary velocity field*/
-		vector<double> U1[DIM];
+		vector<double> U1[3];
 
 		/** Temperature (packed)*/
 		vector<double> temperature0;
@@ -69,8 +69,11 @@ using namespace std;
 
 		/*Map associating dupe vertices in V with one and the other*/
 		map<int, int> dupe_map;
-			
-
+		
+		double V_fused_rows;
+		double V_split_rows;
+		double F_rows;
+		double Area;
 		/** Array of the vertices in 2D parametrized form*/
 		Eigen::MatrixXd uv;
 
@@ -89,8 +92,8 @@ using namespace std;
 		float viscosity = 1e-6;
 		float diffusion = 1e-6;
 		float bouyancy = 0.1;
-		int iterations = 30;
-		float timeStep = 0.1;
+		int iterations = 10;
+		float timeStep = 0.75;
 		float gravity = 1;
 
 
@@ -113,11 +116,11 @@ using namespace std;
 
 		void getVelocity(Vector3d x,  vector<double> U[], Vector3d vel);
 
-		double interpolate(Vector3d x,  vector<double> s);
+		double interpolate(VectorXd x, int t,  vector<double> s);
 
 		void traceParticle(Vector3d x0, double h, Vector3d &x1);
 
-		void traceParticleFromVertex(int v, vector<double> U[], double h, Vector3d& x1);
+		void traceParticleFromVertex(int v, vector<double> U[], double h, Vector2d& x1);
 
 		void traceParticle(Vector3d x0, vector<double> U[], double h, Vector3d &x1);
 
@@ -141,11 +144,13 @@ using namespace std;
 
 		void step();
 
-		bool isInTriangle(Vector3d x, int t);
+		bool isInTriangle(VectorXd x, int t);
 
 		void createSource(int v, double amount);
 
 		double interpolateTempForVertex(Vector2d x);
+
+		double getTempAtVertex(int v);
 
 		double getMaxTemp();
 
@@ -153,7 +158,7 @@ using namespace std;
 
 		bool isDupe(int v);
 
-		int indentifyTriangle(int startV, Vector3d x, int& t);
+		int indentifyTriangle(int startV, VectorXd x, int& t, int pred);
 	};
 
 #endif // !fluid_h

@@ -21,8 +21,6 @@
 
 
 #include "fluid.h"
-#include "trimesh.h"
-#include "tools.h"
 
 
 Eigen::MatrixXd V_uv, uv_bnd, uv_edges1, uv_edges2;
@@ -132,11 +130,24 @@ int main(int argc, char* argv[])
     tools::CreateFusedMesh(V, V_fused, F, F_fused, V_mapSF, V_mapFS, dupe_map, bnd);
 
 
-
     igl::map_vertices_to_circle(V, bnd, bnd_uv);
 
     trimesh::trimesh_t mesh;
     trimesh::trimesh_t uv_mesh;
+    std::vector< trimesh::triangle_t > triangles;
+
+    int kNumVertices = V.rows();
+    int kNumFaces = F.rows();
+    triangles.resize(kNumFaces);
+    for (int i = 0; i < kNumFaces; ++i) {
+        triangles[i].v[0] = F(i, 0);
+        triangles[i].v[1] = F(i, 1);
+        triangles[i].v[2] = F(i, 2);
+    }
+
+    std::vector< trimesh::edge_t > edges;
+    trimesh::unordered_edges_from_triangles(triangles.size(), &triangles[0], edges);
+    uv_mesh.build(kNumVertices, triangles.size(), &triangles[0], edges.size(), &edges[0]);
 
 
     bnd_uv *= sqrt(M.sum() / (2 * igl::PI));
@@ -171,12 +182,46 @@ int main(int argc, char* argv[])
     // Plot the mesh
     igl::opengl::glfw::Viewer viewer;
 
-    Fluid fluid(mesh, V, F, V_uv);
-    fluid.setup();
+
 
 
     igl::opengl::glfw::imgui::ImGuiMenu menu;
     viewer.plugins.push_back(&menu);
+    
+    viewer.data().set_mesh(V, F);
+    V_uv = uv_scale * scaf_data.w_uv.topRows(V.rows());
+    uv_bnd.resize(bnd_uv.rows(), 3);
+    uv_edges1.resize(bnd_uv.rows() - 1, 3);
+    uv_edges2.resize(bnd_uv.rows() - 1, 3);
+    for (int i = 0; i < uv_bnd.rows(); i++) {
+        int j = bnd[i];
+
+        uv_bnd.row(i) = Eigen::Vector3d(V.row(j)[0], V.row(j)[1], V.row(j)[2]);
+        if (i < uv_bnd.rows() - 1) {
+            uv_edges1.row(i) = uv_bnd.row(i);
+        }
+        if (i > 0) {
+            uv_edges2.row(i-1) = uv_bnd.row(i);
+        }
+    }
+    viewer.core().is_animating = true;
+    igl::triangle::scaf_solve(scaf_data, 7);
+    const auto& V_uv = uv_scale * scaf_data.w_uv.topRows(V.rows());
+
+
+    
+    Fluid fluid(uv_mesh, V, F, V_uv, V_fused, F_fused, V_mapSF, V_mapFS, dupe_map);
+    fluid.setup();
+
+    int N = 16;
+    Eigen::MatrixX3d v_temps;
+    Eigen::MatrixX3d ones;
+    v_temps.resize(V.rows(), Eigen::NoChange);
+    ones.resize(V.rows(), Eigen::NoChange);
+    v_temps.setZero();
+    ones.setOnes();
+
+
     menu.callback_draw_viewer_menu = [&]()
     {
         // Draw parent menu content
@@ -200,36 +245,10 @@ int main(int argc, char* argv[])
             ImGui::SliderFloat("Time step", &fluid.timeStep, 0.001, 1);
             ImGui::SliderFloat("Gravity", &fluid.gravity, -10, 15);
 
-            
+
         }
     };
 
-    viewer.data().set_mesh(V, F);
-    V_uv = uv_scale * scaf_data.w_uv.topRows(V.rows());
-    uv_bnd.resize(bnd_uv.rows(), 3);
-    uv_edges1.resize(bnd_uv.rows() - 1, 3);
-    uv_edges2.resize(bnd_uv.rows() - 1, 3);
-    for (int i = 0; i < uv_bnd.rows(); i++) {
-        int j = bnd[i];
-
-        uv_bnd.row(i) = Eigen::Vector3d(V.row(j)[0], V.row(j)[1], V.row(j)[2]);
-        if (i < uv_bnd.rows() - 1) {
-            uv_edges1.row(i) = uv_bnd.row(i);
-        }
-        if (i > 0) {
-            uv_edges2.row(i-1) = uv_bnd.row(i);
-        }
-    }
-    viewer.core().is_animating = true;
-    
-
-    int N = 16;
-    Eigen::MatrixX3d v_temps;
-    Eigen::MatrixX3d ones;
-    v_temps.resize(V.rows(), Eigen::NoChange);
-    ones.resize(V.rows(), Eigen::NoChange);
-    v_temps.setZero();
-    ones.setOnes();
    // viewer.data().set_colors(v_temps);
     viewer.callback_key_down = &key_down;
 
@@ -239,41 +258,46 @@ int main(int argc, char* argv[])
     // Draw checkerboard texture
     viewer.data().show_texture = true;
     Eigen::Vector3d s(0.5, 0.5, 0);
-    fluid.createSource(0 , 20);
+    fluid.createSource(1236 , 20);
     fluid.createSource(50, -20);
 
     std::cerr << "Press space for running an iteration." << std::endl;
     std::cerr << "Press 1 for Mesh 2 for UV" << std::endl;
-    //viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer&)->bool
-    //{
-    //    // Create orbiting animation
-    //    fluid.step();
-    //    double max = std::max(fluid.getMaxTemp(),1.0);
-    //    double min = std::abs(std::min(fluid.getMinTemp(),-1.0));
-    //    for (int i = 0; i < V.rows(); i++) {
-    //        double t = fluid.interpolateTempForVertex(V_uv.row(i));
-    //        s = Eigen::Vector3d(t > 0 ? t : 0, 0.125, t < 0 ? -t : 0);
-    //        /*if (t == 0) {
-    //            s[0] = max;
-    //            s[1] = max;
-    //            s[2] = max;
-    //        }
-    //        else if(t>0){
-    //            s[0] = max;
-    //            s[1] =  max-t;
-    //            s[2] = max-t;
-    //        }
-    //        else {
-    //            s[0] = min - std::abs(t);
-    //            s[1] = min - std::abs(t);
-    //            s[2] = min;
-    //        }*/
-    //        
-    //        v_temps.row(i) = s;
-    //    }
-    //    viewer.data().set_colors(v_temps);
-    //    return false;
-    //};
+    viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer&)->bool
+    {
+        // Create orbiting animation
+        fluid.step();
+        double max = std::max(fluid.getMaxTemp(),1.0);
+        double min = std::abs(std::min(fluid.getMinTemp(),-1.0));
+        for (int i = 0; i < V.rows(); i++) {
+            int v = V_mapSF[i];
+            double t = fluid.getTempAtVertex(v);
+            s = Eigen::Vector3d(t > 0 ? t : 0, 0.125, t < 0 ? -t : 0);
+            /*if (t == 0) {
+                s[0] = max;
+                s[1] = max;
+                s[2] = max;
+            }
+            else if(t>0){
+                s[0] = max;
+                s[1] =  max-t;
+                s[2] = max-t;
+            }
+            else {
+                s[0] = min - std::abs(t);
+                s[1] = min - std::abs(t);
+                s[2] = min;
+            }*/
+            
+            v_temps.row(i) = s;
+        }
+        viewer.data().set_colors(v_temps);
+        return false;
+    };
+    cout << "1 : " << V_uv.row(1) << endl;
+    cout << "2 : " << V_uv.row(2) << endl;
+    cout << "521 : " << V_uv.row(521) << endl;
+    cout << "1509 : " << V_uv.row(1509) << endl;
     // Launch the viewer
     viewer.launch();
     

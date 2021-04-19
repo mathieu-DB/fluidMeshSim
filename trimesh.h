@@ -213,7 +213,7 @@ public:
         halfedge_t he = m_halfedges[m_vertex_halfedges[s]];
         int c = 0;
         while (he.to_vertex != n && c<max) {
-            he = m_halfedges[next_halfedge(m_halfedges[he.opposite_he]).to_vertex];
+            he = next_halfedge(m_halfedges[he.opposite_he]);
             c++;
         }
         if (he.to_vertex != n) return -1;
